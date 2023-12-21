@@ -2,6 +2,9 @@
 This module contains functions for building a topological stack of nodes in a flow direction array.
 For speed and memory efficiency, the functions are written in Cython. 
 """
+# distutils: language = c++
+from libcpp.stack cimport stack
+from libcpp.vector cimport vector
 
 import numpy as np
 cimport numpy as np
@@ -259,3 +262,97 @@ def accumulate_flow(
             accum[recvr] += accum[donor]
 
     return accum
+
+def get_profile_segments(
+    long[:] starting_nodes,
+    int[:] delta,
+    int[:] donors,
+    double[:] field,
+    float threshold= 0
+):
+    """
+    Returns the channel segments for a D8 network, where each segment is a list of node indices. Only adds nodes to segments if some
+    specified `field` value (e.g., upstream area) is greater or equal than the threshold. Each segment in the list of segments starts
+    at a node and ends at a bifurcation or dead end. Each segment contains first the start node and then all nodes upstream of it
+    in the order they are visited. The segments are ordered topologically, so that the first segment in the list
+    is base-level, and the last segment in the list is an upstream tributary. Base level nodes present an edge case, and as such
+    are always present *twice* in the list of segments. This prevents returning of segments containing *only* a single baselevel nodes.
+    i.e., ensuring that every segment is a valid line (not a point).
+
+    This function uses a stack (first in, first out) to keep track of nodes to visit. It also uses a stack to keep track of segments
+    that are being built. This avoids recursion, which is slow.
+
+    Args:
+        starting_nodes: array of baselevel nodes that are used to start the segments (Expects these to exceed threshold)
+        delta: array of delta values
+        donors: array of donor nodes
+        field: array of field values
+        threshold: threshold value for field
+
+    Returns:
+        List of segments, where each segment is a list of node indices
+    """
+    # Create a vector of vector ints to store the segments
+    cdef vector[vector[int]] segments
+    cdef stack[vector[int]] seg_stack # FIFO Stack of segments
+    cdef vector[int] curr_seg # Temporary vector for storing segments
+    cdef stack[int] s  # FIFO Stack of nodes to visit
+    cdef int node # Current node
+    cdef long b # A baselevel node 
+    cdef int n_donors # Number of donors for a node
+    cdef int m # Donor node
+    cdef int n # Donor index
+
+    for b in starting_nodes:
+        s.push(b) # Add the baselevel node to the stack
+        curr_seg.clear() # Clear the current segment vector 
+        curr_seg.push_back(b) # Add the baselevel node to the current segment vector
+        seg_stack.push(curr_seg) # Add the current segment vector to the stack of segments
+    if s.empty():
+        # If there are no valid baselevel nodes, return an empty list
+        return segments
+
+    curr_seg = seg_stack.top()
+    seg_stack.pop()
+    while not s.empty():  
+        node = s.top()
+        s.pop()
+        curr_seg.push_back(node)
+
+        # Loop over donors
+        n_donors = 0
+        for n in range(delta[node], delta[node + 1]):
+            m = donors[n]
+            if m != node:
+                # We don't want to add the node to the queue if it's the same as the current node
+                if field[m] >= threshold:
+                    # Only add the node to the queue if field > threshold.
+                    s.push(m)
+                    n_donors += 1
+        if n_donors == 1:
+            # We're still on the same segment, so we just continue...
+            pass
+        elif n_donors > 1:
+            # We've reached a bifurcation! Add the current segment to the list of segments.
+            segments.push_back(curr_seg)
+            # Now we start a new segment for each donor, and put them in the segments queue.
+            for _ in range(n_donors):
+                curr_seg.clear()
+                curr_seg.push_back(node)
+                seg_stack.push(curr_seg)
+            # Pop the last element of the segment stack and continue from where we left off.
+            curr_seg.clear()
+            curr_seg = seg_stack.top()
+            seg_stack.pop()
+        elif n_donors == 0:
+            # We've reached a dead end! Add the current segment to the list of segments.
+            segments.push_back(curr_seg)
+            if seg_stack.empty():
+                # If the segments queue is empty, we're done!
+                break
+            else:
+                # Otherwise, pop the last element of the segment stack and continue from where we left off.
+                curr_seg.clear()
+                curr_seg = seg_stack.top()
+                seg_stack.pop()
+    return segments
