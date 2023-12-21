@@ -1,6 +1,6 @@
 """
 This module contains functions for building a topological stack of nodes in a flow direction array.
-For speed and memory efficiency, the functions are written in Cython.
+For speed and memory efficiency, the functions are written in Cython. 
 """
 
 import numpy as np
@@ -127,20 +127,20 @@ def make_donor_array(long[:] r, int[:] delta) -> int[:] :
 
 @cython.boundscheck(False)  # Deactivate bounds checking
 @cython.wraparound(False)   # Deactivate negative indexing.
-def add_to_stack(int l, int j, int[:] s, int[:] delta, int[:] donors) -> int:
+def add_to_ordered_list(int l, int j, int[:] s, int[:] delta, int[:] donors) -> int:
     """
-    Adds node l, and its donors (recursively), to the stack. Used in the recursive
-    build_stack function.
+    Adds node l, and its donors (recursively), to the ordered list of nodes. Used in the recursive
+    build_ordered_list function.
 
     Args:
         l: The node index.
-        j: The stack index.
-        s: The stack.
+        j: The list index.
+        s: The ordered list.
         delta: The index array.
         donors: The donor information array.
 
     Returns:
-        The updated stack index.
+        The updated ordered list index.
     """
     s[j] = l
     j += 1
@@ -148,18 +148,18 @@ def add_to_stack(int l, int j, int[:] s, int[:] delta, int[:] donors) -> int:
     for n in range(delta[l], delta[l + 1]):
         m = donors[n]
         if m != l:
-            j = add_to_stack(m, j, s, delta, donors)
+            j = add_to_ordered_list(m, j, s, delta, donors)
 
     return j
 
 @cython.boundscheck(False)  # Deactivate bounds checking
 @cython.wraparound(False)   # Deactivate negative indexing.
-def build_stack_recursive(long[:] receivers, np.ndarray[long, ndim=1] baselevel_nodes) -> int[:] :
+def build_ordered_list_recursive(long[:] receivers, np.ndarray[long, ndim=1] baselevel_nodes) -> int[:] :
     """
-    Builds the stack of nodes in topological order, given the receiver array.
+    Builds the ordered list of nodes in topological order, given the receiver array.
     Starts at the baselevel nodes and works upstream. This uses recursion 
     and as such is not recommended for large arrays. Included for legacy reasons. 
-    Use build_stack_iterative instead.
+    Use build_ordered_list_iterative instead.
 
     Args:
         receivers: The receiver array (i.e., receiver[i] is the ID
@@ -173,20 +173,21 @@ def build_stack_recursive(long[:] receivers, np.ndarray[long, ndim=1] baselevel_
     cdef int[:] n_donors = count_donors(receivers)
     cdef int[:] delta = ndonors_to_delta(n_donors)
     cdef int[:] donors = make_donor_array(receivers, delta)
-    cdef int[:] stack = np.zeros(n, dtype=np.int32) - 1
+    cdef int[:] ordered_list = np.zeros(n, dtype=np.int32) - 1
     cdef int j = 0
     cdef int b
     for b in baselevel_nodes:
-        j = add_to_stack(b, j, stack, delta, donors)
-    return stack      
+        j = add_to_ordered_list(b, j, ordered_list, delta, donors)
+    return ordered_list      
 
 @cython.boundscheck(False)  # Deactivate bounds checking
 @cython.wraparound(False)   # Deactivate negative indexing.
-def build_stack_iterative(long[:] receivers, np.ndarray[long, ndim=1] baselevel_nodes) -> int[:] :
+def build_ordered_list_iterative(long[:] receivers, np.ndarray[long, ndim=1] baselevel_nodes) -> int[:] :
     """
-    Builds the stack of nodes in topological order, given the receiver array.
+    Builds the ordered list of nodes in topological order, given the receiver array.
     Starts at the baselevel nodes and works upstream in a wave building a 
-    breadth-first search order of the nodes.
+    breadth-first search order of the nodes using a queue. This is much faster
+    than the recursive version. 
 
     Args:
         receivers: The receiver array (i.e., receiver[i] is the ID
@@ -194,13 +195,13 @@ def build_stack_iterative(long[:] receivers, np.ndarray[long, ndim=1] baselevel_
         baselevel_nodes: The baselevel nodes to start from.
 
     Returns:
-        The stack of nodes in topological order (BFS).
+        The nodes in topological order (using a BFS).
     """
     cdef int n = len(receivers)
     cdef int[:] n_donors = count_donors(receivers)
     cdef int[:] delta = ndonors_to_delta(n_donors)
     cdef int[:] donors = make_donor_array(receivers, delta)
-    cdef int[:] stack = np.zeros(n, dtype=np.int32) - 1
+    cdef int[:] ordered_list = np.zeros(n, dtype=np.int32) - 1
     cdef int j = 0 # The index in the stack (i.e., topological order)
     cdef int b, node, m
     # Queue for breadth-first search
@@ -216,7 +217,7 @@ def build_stack_iterative(long[:] receivers, np.ndarray[long, ndim=1] baselevel_
     while front < back:
         node = q[front] # Get the node from the queue
         front += 1 # Increment the front of the queue (i.e., pop the node)
-        stack[j] = node # Add the node to the stack
+        ordered_list[j] = node # Add the node to the stack
         j += 1 # Increment the stack index.
         # Loop through the donors of the node
         for n in range(delta[node], delta[node+1]):
@@ -226,23 +227,23 @@ def build_stack_iterative(long[:] receivers, np.ndarray[long, ndim=1] baselevel_
                 back += 1
 
     free(q)
-    return stack
+    return ordered_list
 
 @cython.boundscheck(False)  # Deactivate bounds checking
 @cython.wraparound(False)   # Deactivate negative indexing.
 def accumulate_flow(
     long[:] receivers, 
-    int[:] stack, 
+    int[:] ordered, 
     np.ndarray[double, ndim=1] weights
 ):
     """
     Accumulates flow along the stack of nodes in topological order, given the receiver array,
-    the ordered stack, and a weights array which contains the contribution from each node.
+    the ordered list of nodes, and a weights array which contains the contribution from each node.
 
     Args:
         receivers: The receiver array (i.e., receiver[i] is the ID
         of the node that receives the flow from the i'th node).
-        stack: The ordered stack of nodes.
+        ordered: The ordered list of nodes.
         weights: The weights array (i.e., the contribution from each node).
     """
     cdef int n = receivers.shape[0]
@@ -252,7 +253,7 @@ def accumulate_flow(
 
     # Accumulate flow along the stack from upstream to downstream
     for i in range(n - 1, -1, -1):
-        donor = stack[i]
+        donor = ordered[i]
         recvr = receivers[donor]
         if donor != recvr:
             accum[recvr] += accum[donor]

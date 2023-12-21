@@ -2,9 +2,9 @@
 Module for accumulating flow on a D8 flow grid. This class can be used to calculate drainage area and discharge,
 and to accumulate any other tracer across a drainage network. 
 
-Builds a network of nodes from a D8 flow grid. Uses a stack-based algorithm to traverse the network in topological order, 
+Builds a network of nodes from a D8 flow grid. Uses a queue-based algorithm to traverse the network in topological order, 
 modified from Braun & Willet (2013) DOI: 10.1016/j.geomorph.2012.10.008. This is faster than the recursive algorithm used in 
-original Landlab implementation as we use an iterative build_stack algorithm (much faster). Most of the code is written 
+original Landlab implementation as we use an iterative build_ordered_list algorithm (much faster). Most of the code is written 
 in Cython for speed. The approach is linear w.r.t. the number of nodes in the network. Class is designed to be used with 
 geospatial rasters, but can also be used with a numpy array of D8 flow directions. 
 
@@ -92,7 +92,7 @@ class D8Accumulator:
         Array of receiver nodes (i.e., the ID of the node that receives the flow from the i'th node)
     baselevel_nodes : np.ndarray
         Array of baselevel nodes (i.e., nodes that do not donate flow to any other nodes)
-    stack : np.ndarray
+    order : np.ndarray
         Array of nodes in order of upstream to downstream (breadth-first)
     arr : np.ndarray
         Array of D8 flow directions
@@ -125,13 +125,18 @@ class D8Accumulator:
         filename : str
             Path to the D8 flow grid
         """
+        # Check that filename is a string
+        if not isinstance(filename, str):
+            raise TypeError("Filename must be a string")
         self._arr, self._ds = read_geo_file(filename)
         self._arr = self._arr.astype(int)
         self._receivers = cf.d8_to_receivers(self.arr)
         self._baselevel_nodes = np.where(
             self.receivers == np.arange(len(self.receivers))
         )[0]
-        self._stack = cf.build_stack_iterative(self.receivers, self.baselevel_nodes)
+        self._order = cf.build_ordered_list_iterative(
+            self.receivers, self.baselevel_nodes
+        )
 
     def accumulate(self, weights: np.ndarray = None) -> np.ndarray:
         """Accumulate flow on the grid using the D8 flow directions
@@ -157,7 +162,7 @@ class D8Accumulator:
                 raise ValueError("Weights must be have same shape as D8 array")
             weights = weights.flatten()
 
-        return cf.accumulate_flow(self.receivers, self.stack, weights=weights).reshape(
+        return cf.accumulate_flow(self.receivers, self.order, weights=weights).reshape(
             self._arr.shape
         )
 
@@ -172,9 +177,9 @@ class D8Accumulator:
         return self._baselevel_nodes
 
     @property
-    def stack(self) -> np.ndarray:
+    def order(self) -> np.ndarray:
         """Array of nodes in order of upstream to downstream"""
-        return np.asarray(self._stack)
+        return np.asarray(self._order)
 
     @property
     def arr(self):
@@ -199,7 +204,9 @@ class D8Accumulator:
         self._baselevel_nodes = np.where(
             self.receivers == np.arange(len(self.receivers))
         )[0]
-        self._stack = cf.build_stack_iterative(self.receivers, self.baselevel_nodes)
+        self._order = cf.build_ordered_list_iterative(
+            self.receivers, self.baselevel_nodes
+        )
 
     @classmethod
     def from_array(cls, arr: np.ndarray):
@@ -223,7 +230,7 @@ class D8Accumulator:
         instance._baselevel_nodes = np.where(
             instance.receivers == np.arange(len(instance.receivers))
         )[0]
-        instance._stack = cf.build_stack_iterative(
+        instance._order = cf.build_ordered_list_iterative(
             instance.receivers, instance.baselevel_nodes
         )
         return instance
