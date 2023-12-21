@@ -280,7 +280,7 @@ def get_profile_segments(
     i.e., ensuring that every segment is a valid line (not a point).
 
     This function uses a stack (first in, first out) to keep track of nodes to visit. It also uses a stack to keep track of segments
-    that are being built. This avoids recursion, which is slow.
+    that are being built. This avoids recursion, which is slow. Its also written in (mostly) pure Cython, which is fast. 
 
     Args:
         starting_nodes: array of baselevel nodes that are used to start the segments (Expects these to exceed threshold)
