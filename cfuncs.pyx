@@ -263,6 +263,8 @@ def accumulate_flow(
 
     return accum
 
+@cython.boundscheck(False)  # Deactivate bounds checking
+@cython.wraparound(False)   # Deactivate negative indexing.
 def get_profile_segments(
     long[:] starting_nodes,
     int[:] delta,
@@ -292,7 +294,7 @@ def get_profile_segments(
     Returns:
         List of segments, where each segment is a list of node indices
     """
-    # Create a vector of vector ints to store the segments
+    # Create a vector of vector ints to store the segments    
     cdef vector[vector[int]] segments
     cdef stack[vector[int]] seg_stack # FIFO Stack of segments
     cdef vector[int] curr_seg # Temporary vector for storing segments
@@ -356,3 +358,82 @@ def get_profile_segments(
                 curr_seg = seg_stack.top()
                 seg_stack.pop()
     return segments
+
+@cython.boundscheck(False)  # Deactivate bounds checking
+@cython.wraparound(False)   # Deactivate negative indexing.
+cpdef (int, int) ItoXY(int i, int ncols):
+    """
+    Converts a node index for a 2D array to an x, y pair of col, row indices.
+
+    Args:
+        i: The node index.
+        ncols: The number of columns in the array.
+
+    Returns:
+        The x, y coordinate pair.
+    """
+    cdef int x = i % ncols
+    cdef int y = i // ncols
+    return x, y
+
+@cython.boundscheck(False)  # Deactivate bounds checking
+@cython.wraparound(False)   # Deactivate negative indexing.
+cpdef vector[float] XYtocoords(int x, int y, float dx, float dy, float ULx, float ULy):
+    """
+    Converts a pair of col, row indices to a pair of geospatial x, y coordinates.
+
+    Args:
+        x: The column index.
+        y: The row index.
+        dx: The cell size in the x direction.
+        dy: The cell size in the y direction (assumed to be negative in keeping with geospatial convention)
+        ULx: The x coordinate of the upper left corner of the array.
+        ULy: The y coordinate of the upper left corner of the array.
+
+    Returns:
+        The x, y coordinate pair.
+    """
+    cdef vector[float] coords
+    cdef float cx = ULx + x * dx
+    cdef float cy = ULy + y * dy
+    coords.push_back(cx)
+    coords.push_back(cy)
+    return coords
+
+@cython.boundscheck(False)  # Deactivate bounds checking
+@cython.wraparound(False)   # Deactivate negative indexing.    
+def id_segments_to_coords_segments(vector[vector[int]] segments, int ncols, float dx, float dy, float ULx, float ULy):
+    """
+    Converts a list of segments to a list of coordinates.
+
+    Args: 
+        ncols: The number of columns in the array.
+        dx: The cell size in the x direction.
+        dy: The cell size in the y direction (assumed to be negative in keeping with geospatial convention)
+        ULx: The x coordinate of the upper left corner of the array.
+        ULy: The y coordinate of the upper left corner of the array.
+
+    Returns:
+        A list of segments, where each segment is a list of coordinates (which are a list of two floats)
+    """
+
+    cdef vector[vector[vector[float]]] coords
+    cdef vector[vector[float]] segment_coords
+    cdef vector[float] coord
+    cdef int x, y
+    cdef int i, j
+    cdef int nsegs = segments.size()
+    cdef int npts
+    cdef int node
+    cdef vector[int] segment
+    for i in range(nsegs):
+        segment = segments[i]
+        npts = segment.size()
+        segment_coords.clear()
+        for j in range(npts):
+            node = segment[j]
+            x, y = ItoXY(node, ncols)
+            coord = XYtocoords(x, y, dx, dy, ULx, ULy)
+            segment_coords.push_back(coord)
+        coords.push_back(segment_coords)
+    return coords
