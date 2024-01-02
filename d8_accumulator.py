@@ -15,17 +15,7 @@ python setup.py build_ext --inplace
 
 ## Example of use 
 
->>> from d8_accumulator import D8Accumulator, write_geotiff
->>> import numpy as np 
->>> accumuator = D8Accumulator("d8.tif")
->>> # Create an array of cell areas
->>> cell_area = np.ones(len(accumulator.receivers)) * 100 # 100 m^2 cell area
->>> # Calculate drainage area in m^2
->>> drainage_area = accumulator.accumulate(weights=cell_area)
->>> # Calculate number of upstream nodes
->>> number_nodes = accumulator.accumulate()
->>> # Write the results to a geotiff
->>> write_geotiff("drainage_area.tif", drainage_area, accumulator.ds)
+See example.py for an example of how to use the D8Accumulator class.
 
 """
 
@@ -106,14 +96,22 @@ class D8Accumulator:
         Array of D8 flow directions
     ds : gdal.Dataset
         GDAL Dataset object of the D8 flow grid. If the array is manually set, this will be None
+    extent : List[float]
+        Extent of the array in the accumulator as [xmin, xmax, ymin, ymax]. Can be used for plotting.
 
     Methods
     -------
     accumulate(weights : np.ndarray = None)
         Accumulate flow on the grid using the D8 flow directions
-    get_profile_segments(field : np.ndarray, threshold : float)
-        Get the profile segments of river channels where 'field' is greater than 'threshold'. Used for, e.g., plotting 
-        the location of a river channel as a line-string. 
+    get_channel_segments(field : np.ndarray, threshold : float)
+        Get the profile segments of river channels where 'field' is greater than 'threshold'. Used for, e.g., plotting
+        the location of a river channel as a line-string.
+    get_profile(start_node : int)
+        Extract the downstream profile *from* a given node.
+    node_to_coord(node : int)
+        Converts a node index to a coordinate pair
+    coord_to_node(x : float, y : float)
+        Converts a coordinate pair to a node index
 
     Examples
     --------
@@ -126,10 +124,10 @@ class D8Accumulator:
     >>> number_nodes = accumulator.accumulate()
     >>> # Write the results to a geotiff
     >>> write_geotiff("drainage_area.tif", drainage_area, accumulator.ds)
-    >>> # Get the profile segments of river channels with drainage area greater than 1000 m^2
-    >>> profile_segments = accumulator.get_profile_segments(drainage_area, 1000)
-    >>> # Write the profile segments to a GeoJSON file
-    >>> write_geojson("river_segments.geojson", profile_segments)
+    >>> # Get the segments of river channels with drainage area greater than 1000 m^2
+    >>> segments = accumulator.get_channel_segments(drainage_area, 1000)
+    >>> # Write the segments to a GeoJSON file
+    >>> write_geojson("river_segments.geojson", segments)
     """
 
     def __init__(self, filename: str):
@@ -180,7 +178,7 @@ class D8Accumulator:
             self._arr.shape
         )
 
-    def get_profile_segments(
+    def get_channel_segments(
         self, field: np.ndarray, threshold: float
     ) -> Union[List[List[int]], MultiLineString]:
         """Get the profile segments of river channels where 'field' is greater than 'threshold'. i.e.,
@@ -213,7 +211,7 @@ class D8Accumulator:
         delta = cf.ndonors_to_delta(n_donors)
         donors = cf.make_donor_array(self._receivers, delta)
         # Get the profile segments of node IDs
-        segments = cf.get_profile_segments(
+        segments = cf.get_channel_segments(
             starting_nodes, delta, donors, field.flatten(), threshold
         )
         # Convert to x,y indices
@@ -234,6 +232,62 @@ class D8Accumulator:
             )
             return MultiLineString(coord_segs)
 
+    def get_profile(self, start_node: int) -> Tuple[np.ndarray[int], np.ndarray[float]]:
+        """Extract the downstream profile *from* a given node. Returns the profile as a list
+        of node IDs in order upstream to downstream. Also returns the distance along the profile 
+        *counting upstream from the mouth* in the same units as the geospatial file. i.e., 
+        a distance of 0 is the mouth of the river, and a distance of 100 is 100 units upstream from the mouth.
+
+        Parameters
+        ----------
+        start_node : int
+            Node ID to start the profile from. Must be a valid node ID.
+
+        Returns
+        -------
+        Tuple[np.ndarray[int], np.nadrray[float]]
+            Tuple of the profile as an array of node IDs and the distance along the profile from the start node.
+
+        Raises
+        ------
+        ValueError
+            If start_node is not a valid node ID
+        """
+        if start_node < 0 or start_node >= self.arr.size:
+            raise ValueError("start_node must be a valid node index")
+
+        dx = self.ds.GetGeoTransform()[1]
+        dy = self.ds.GetGeoTransform()[5] * -1
+        profile, distance = cf.get_profile(
+            start_node, dx, dy, self._receivers, self.arr.flatten()
+        )
+        dstream_dist = np.asarray(distance)
+        return np.asarray(profile), np.amax(dstream_dist) - dstream_dist
+
+    def node_to_coord(self, node: int) -> Tuple[float, float]:
+        """Converts a node index to a coordinate pair"""
+        ncols, nrows = self.arr.shape
+        if node > ncols * nrows:
+            raise ValueError("Node is out of bounds")
+        x_ind = node % ncols
+        y_ind = node // ncols
+        ulx, dx, _, uly, _, dy = self.ds.GetGeoTransform()
+        x_coord = ulx + dx * x_ind
+        y_coord = uly + dy * y_ind
+        return x_coord, y_coord
+
+    def coord_to_node(self, x: float, y: float) -> int:
+        """Converts a coordinate pair to a node index"""
+        ncols, nrows = self.arr.shape
+        ulx, dx, _, uly, _, dy = self.ds.GetGeoTransform()
+        x_ind = int((x - ulx) / dx)
+        y_ind = int((y - uly) / dy)
+        if x_ind < 0 or x_ind > ncols:
+            raise ValueError("x coordinate is out of bounds")
+        if y_ind < 0 or y_ind > nrows:
+            raise ValueError("y coordinate is out of bounds")
+        return y_ind * nrows + x_ind
+
     @property
     def receivers(self) -> np.ndarray:
         """Array of receiver nodes (i.e., the ID of the node that receives the flow from the i'th node)"""
@@ -253,6 +307,18 @@ class D8Accumulator:
     def arr(self):
         """Array of D8 flow directions"""
         return self._arr
+
+    @property
+    def extent(self) -> List[float]:
+        """
+        Get the extent of the array in the accumulator. Can be used for plotting.
+        """
+        trsfm = self.ds.GetGeoTransform()
+        minx = trsfm[0]
+        maxy = trsfm[3]
+        maxx = minx + trsfm[1] * self.arr.shape[1]
+        miny = maxy + trsfm[5] * self.arr.shape[0]
+        return [minx, maxx, miny, maxy]
 
     @property
     def ds(self):

@@ -13,19 +13,10 @@ To install run:
 ```
 python setup.py build_ext --inplace
 ```
-This compiles the Cython scripts.
+This compiles the Cython scripts and allows them to be imported into python scripts. Note this does not install a package so 
+any scripts using this module must be in the same directory as the compiled files.
 
 ## Example of use 
 
-```
-from d8_accumulator import D8Accumulator, write_geotiff
-accumulator = D8Accumulator("d8.tif")
-# Create an array of cell areas
-cell_area = np.ones(len(accumulator.receivers)) * 100 # 100 m^2 cell area
-# Calculate drainage area in m^2
-drainage_area = accumulator.accumulate(weights=cell_area)
-# Calculate number of upstream nodes
-number_nodes = accumulator.accumulate()
-# Write the results to a geotiff
-write_geotiff("drainage_area.tif", drainage_area, accumulator.ds)
-```
+An example of use is given in the script `example.py` which analyses the flow accumulation and drainage area of the 
+domain covered by `d8_eg.nc`. 
