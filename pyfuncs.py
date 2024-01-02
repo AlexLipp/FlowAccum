@@ -1,3 +1,9 @@
+"""
+These pure python functions are not used in the main code, but are included 
+for reference. They are not used because they are slow compared to the
+equivalent functions in the cython module. 
+"""
+
 import numpy
 from typing import List
 

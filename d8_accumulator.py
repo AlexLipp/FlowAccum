@@ -6,17 +6,9 @@ Builds a network of nodes from a D8 flow grid. Uses a queue-based algorithm to t
 modified from Braun & Willet (2013) DOI: 10.1016/j.geomorph.2012.10.008. This is faster than the recursive algorithm used in 
 original Landlab implementation as we use an iterative build_ordered_list algorithm (much faster). Most of the code is written 
 in Cython for speed. The approach is linear w.r.t. the number of nodes in the network. Class is designed to be used with 
-geospatial rasters, but can also be used with a numpy array of D8 flow directions. 
+geospatial rasters, but can also be used with a numpy array of D8 flow directions with some loss of functionality. 
 
-## Installation 
-
-To install run: 
-python setup.py build_ext --inplace
-
-## Example of use 
-
-See example.py for an example of how to use the D8Accumulator class.
-
+See example.py and README.md for usage examples. 
 """
 
 import warnings
@@ -112,22 +104,6 @@ class D8Accumulator:
         Converts a node index to a coordinate pair
     coord_to_node(x : float, y : float)
         Converts a coordinate pair to a node index
-
-    Examples
-    --------
-    >>> accumuator = D8Accumulator("d8.tif")
-    >>> # Create an array of cell areas
-    >>> cell_area = np.ones(len(accumulator.receivers)) * 100 # 100 m^2 cell area
-    >>> # Calculate drainage area in m^2
-    >>> drainage_area = accumulator.accumulate(weights=cell_area)
-    >>> # Calculate number of upstream nodes
-    >>> number_nodes = accumulator.accumulate()
-    >>> # Write the results to a geotiff
-    >>> write_geotiff("drainage_area.tif", drainage_area, accumulator.ds)
-    >>> # Get the segments of river channels with drainage area greater than 1000 m^2
-    >>> segments = accumulator.get_channel_segments(drainage_area, 1000)
-    >>> # Write the segments to a GeoJSON file
-    >>> write_geojson("river_segments.geojson", segments)
     """
 
     def __init__(self, filename: str):
