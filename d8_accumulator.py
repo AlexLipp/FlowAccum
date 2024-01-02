@@ -210,8 +210,8 @@ class D8Accumulator:
 
     def get_profile(self, start_node: int) -> Tuple[np.ndarray[int], np.ndarray[float]]:
         """Extract the downstream profile *from* a given node. Returns the profile as a list
-        of node IDs in order upstream to downstream. Also returns the distance along the profile 
-        *counting upstream from the mouth* in the same units as the geospatial file. i.e., 
+        of node IDs in order upstream to downstream. Also returns the distance along the profile
+        *counting upstream from the mouth* in the same units as the geospatial file. i.e.,
         a distance of 0 is the mouth of the river, and a distance of 100 is 100 units upstream from the mouth.
 
         Parameters
@@ -242,8 +242,8 @@ class D8Accumulator:
 
     def node_to_coord(self, node: int) -> Tuple[float, float]:
         """Converts a node index to a coordinate pair"""
-        ncols, nrows = self.arr.shape
-        if node > ncols * nrows:
+        nrows, ncols = self.arr.shape
+        if node > ncols * nrows or node < 0:
             raise ValueError("Node is out of bounds")
         x_ind = node % ncols
         y_ind = node // ncols
@@ -254,15 +254,15 @@ class D8Accumulator:
 
     def coord_to_node(self, x: float, y: float) -> int:
         """Converts a coordinate pair to a node index"""
-        ncols, nrows = self.arr.shape
+        nrows, ncols = self.arr.shape
         ulx, dx, _, uly, _, dy = self.ds.GetGeoTransform()
         x_ind = int((x - ulx) / dx)
         y_ind = int((y - uly) / dy)
-        if x_ind < 0 or x_ind > ncols:
-            raise ValueError("x coordinate is out of bounds")
-        if y_ind < 0 or y_ind > nrows:
-            raise ValueError("y coordinate is out of bounds")
-        return y_ind * nrows + x_ind
+        out = y_ind * ncols + x_ind
+        print(x_ind, y_ind, out)
+        if out > ncols * nrows or out < 0:
+            raise ValueError("Coordinate is out of bounds")
+        return out
 
     @property
     def receivers(self) -> np.ndarray:
