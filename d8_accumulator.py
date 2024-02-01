@@ -64,8 +64,9 @@ def elevation_to_d8(filepath: str) -> None:
     """
     elev, ds = read_geo_file(filepath)
     d8 = cf.topo_to_d8(elev.astype(float))
-    # Write the D8 flow grid to a file called filename_d8.tif
-    write_geotiff(filepath[:-3] + "_d8.tif", d8, ds)
+    # Write the D8 flow grid to a file called d8_filename.tif
+    write_geotiff("d8_" + filepath, d8, ds)
+
 
 def write_geojson(filename: str, geojson: dict):
     """Writes a GeoJSON object to a file"""
@@ -284,7 +285,6 @@ class D8Accumulator:
         x_ind = int((x - ulx) / dx)
         y_ind = int((y - uly) / dy)
         out = y_ind * ncols + x_ind
-        print(x_ind, y_ind, out)
         if out > ncols * nrows or out < 0:
             raise ValueError("Coordinate is out of bounds")
         return out
