@@ -30,7 +30,7 @@ def read_geo_file(filename: str) -> Tuple[np.ndarray, gdal.Dataset]:
     return arr, ds
 
 
-def write_geotiff(filename: str, arr: np.ndarray, ds: gdal.Dataset):
+def write_geotiff(filename: str, arr: np.ndarray, ds: gdal.Dataset) -> None:
     """Writes a numpy array to a geotiff"""
     if arr.dtype == np.float32:
         arr_type = gdal.GDT_Float32
@@ -46,6 +46,26 @@ def write_geotiff(filename: str, arr: np.ndarray, ds: gdal.Dataset):
     band.FlushCache()
     band.ComputeStatistics(False)
 
+
+def elevation_to_d8(filepath: str) -> None:
+    """
+    Converts a geospatial raster of elevations to a D8 flow grid and writes it to a file called [filename]_d8.tif.
+    Follows convention of ESRI D8 flow directions: right = 1, lower right = 2, bottom = 4, etc.
+    All boundary nodes are set to be sinks.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the geospatial raster of elevations
+
+    Returns
+    -------
+    None
+    """
+    elev, ds = read_geo_file(filepath)
+    d8 = cf.topo_to_d8(elev.astype(float))
+    # Write the D8 flow grid to a file called filename_d8.tif
+    write_geotiff(filepath[:-3] + "_d8.tif", d8, ds)
 
 def write_geojson(filename: str, geojson: dict):
     """Writes a GeoJSON object to a file"""

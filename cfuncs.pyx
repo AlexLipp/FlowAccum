@@ -54,6 +54,68 @@ def d8_to_receivers(np.ndarray[long, ndim=2] arr) -> long[:] :
                 raise ValueError(f"Invalid flow direction value: {arr[i, j]}")
     return receivers
 
+cdef inline int argmin(double[:] arr, int n):
+    """
+    Returns the index of the minimum value in an array.
+    """
+    cdef int min_index = 0
+    cdef double min_value = arr[0]
+    cdef int i
+    for i in range(1, n):
+        if arr[i] < min_value:
+            min_value = arr[i]
+            min_index = i
+    return min_index
+
+@cython.boundscheck(False)  # Deactivate bounds checking
+@cython.wraparound(False)   # Deactivate negative indexing.
+def topo_to_d8(np.ndarray[double, ndim=2] elev):
+    """
+    Converts a topographic array to a D8 flow direction array under the
+    convention:
+    r = 1, br = 2, b = 4, bl = 8, l = 16, tl = 32, t = 64, tr = 128.
+    Sink cells (and boundary cells) are assigned a flow direction of 0.
+
+    Args:
+        elev: An array of heights.
+
+    Returns:
+        A D8 flow direction array.
+    """
+
+    cdef int i, j, min_index
+    cdef long[:, :] d8 = np.zeros((elev.shape[0],elev.shape[1]), dtype=long) - 1
+    cdef double c, r, br, b, bl, l, tl, t, tr
+    cdef double neighbours[8]  # C array instead of numpy array
+
+    for i in range(elev.shape[0]):
+        for j in range(elev.shape[1]):
+            if i == 0 or j == 0 or i == elev.shape[0] - 1 or j == elev.shape[1] - 1:
+                d8[i, j] = 0
+            else:
+                c = elev[i, j]
+                r = elev[i, j + 1]
+                br = elev[i + 1, j + 1]
+                b = elev[i + 1, j]
+                bl = elev[i + 1, j - 1]
+                l = elev[i, j - 1]
+                tl = elev[i - 1, j - 1]
+                t = elev[i - 1, j]
+                tr = elev[i - 1, j + 1]
+                neighbours[0] = r
+                neighbours[1] = br
+                neighbours[2] = b
+                neighbours[3] = bl
+                neighbours[4] = l
+                neighbours[5] = tl
+                neighbours[6] = t
+                neighbours[7] = tr
+                min_index = argmin(neighbours,8)
+                if c <= neighbours[min_index]:
+                    d8[i, j] = 0
+                else:
+                    d8[i, j] = long(2**min_index)  # cast the result to int
+    return np.asarray(d8)
 
 @cython.boundscheck(False)  # Deactivate bounds checking
 @cython.wraparound(False)   # Deactivate negative indexing.
@@ -473,5 +535,8 @@ def get_profile(long start_node, float dx, float dy, long[:] receivers, long[:] 
         else:
             # Flow going diagonally
             downstream_distance += np.sqrt(dx**2 + dy**2)
+    profile.push_back(current_node)
+    distance.push_back(downstream_distance)
 
     return profile, distance
+
