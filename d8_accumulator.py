@@ -34,6 +34,8 @@ def write_geotiff(filename: str, arr: np.ndarray, ds: gdal.Dataset) -> None:
     """Writes a numpy array to a geotiff"""
     if arr.dtype == np.float32:
         arr_type = gdal.GDT_Float32
+    elif arr.dtype == np.float64:
+        arr_type = gdal.GDT_Float64
     else:
         arr_type = gdal.GDT_Int32
 
@@ -266,11 +268,37 @@ class D8Accumulator:
             dstream_dist = np.asarray(distance)
             return np.asarray(profile), np.amax(dstream_dist) - dstream_dist
 
+    def get_upstream_nodes(self, start_node: int) -> np.ndarray:
+        """Get all nodes upstream of a given node. Returns an array of node IDs.
+
+        Parameters
+        ----------
+        start_node : int
+            Node ID to start the profile from. Must be a valid node ID.
+
+        Returns
+        -------
+        np.ndarray
+            Array of node IDs upstream of the start node.
+
+        Raises
+        ------
+        ValueError
+            If start_node is not a valid node ID
+        TypeError
+            If start_node is not an integer
+        """
+        self._check_valid_node(start_node)
+        n_donors = cf.count_donors(self._receivers)
+        delta = cf.ndonors_to_delta(n_donors)
+        donors = cf.make_donor_array(self._receivers, delta)
+
+        return np.asarray(cf.get_upstream_nodes(start_node, delta, donors))
+
     def node_to_coord(self, node: int) -> Tuple[float, float]:
         """Converts a node index to a coordinate pair"""
-        nrows, ncols = self.arr.shape
-        if node > ncols * nrows or node < 0:
-            raise ValueError("Node is out of bounds")
+        self._check_valid_node(node)
+        _, ncols = self.arr.shape
         x_ind = node % ncols
         y_ind = node // ncols
         ulx, dx, _, uly, _, dy = self.ds.GetGeoTransform()
@@ -288,6 +316,13 @@ class D8Accumulator:
         if out > ncols * nrows or out < 0:
             raise ValueError("Coordinate is out of bounds")
         return out
+
+    def _check_valid_node(self, node: int) -> None:
+        """Checks if a node is valid"""
+        if node < 0 or node >= self.arr.size:
+            raise ValueError("Node is out of bounds")
+        if not isinstance(node, int) and not np.issubdtype(type(node), np.integer):
+            raise TypeError("Node must be an integer")
 
     def get_sink(self, node: int) -> int:
         """Gets the sink node which flow from the input node ultimate goes to.
@@ -309,15 +344,29 @@ class D8Accumulator:
         ValueError
             If node is out of bounds
         """
-        # Check if node is an int:
-        if not isinstance(node, int):
-            raise TypeError("Node must be an integer")
-        # Check if node is a valid node
-        if node < 0 or node >= self.arr.size:
-            raise ValueError("Node is out of bounds")
-
+        self._check_valid_node(node)
         # Get the sink node
         return cf.get_sink_node(node, self._receivers)
+    
+    def get_node_mask(self, nodes: np.ndarray) -> np.ndarray:
+        """Get a boolean mask of the nodes in the input array 
+        
+        Parameters
+        ----------
+        nodes : np.ndarray
+            Array of node indices
+        
+        Returns
+        -------
+        np.ndarray
+            Boolean mask of the nodes in the input array
+
+
+        """
+        out = np.zeros(self.arr.shape,dtype=bool).flatten()
+        out.fill(False)
+        out[nodes] = True
+        return out.reshape(self.arr.shape)
 
     @property
     def receivers(self) -> np.ndarray:

@@ -43,6 +43,17 @@ profile_coords = [accumulator.node_to_coord(node) for node in profile]
 sink_node = accumulator.get_sink(start_node)
 sink_x, sink_y = accumulator.node_to_coord(sink_node)
 
+# Find the drainage mask of a different catchment
+startx_2, starty_2 = 355000, 737500
+print(f"Finding the basin mask that contains the point ({startx_2},{starty_2})")
+sink_node_2 = accumulator.get_sink(accumulator.coord_to_node(startx_2, starty_2))
+sink_x_2, sink_y_2 = accumulator.node_to_coord(sink_node_2)
+upstream = accumulator.get_upstream_nodes(sink_node_2)
+mask = accumulator.get_node_mask(upstream)
+# Convert the Falses into np.NaN for transparent visualization
+mask = mask.astype(float)
+mask[mask == 0] = np.NaN
+
 print("Visualizing results")
 plt.figure(figsize=(12, 10))
 plt.subplot(2, 2, 1)
@@ -76,10 +87,16 @@ plt.plot(
     "g-",
     label="Channel profile",
 )
-plt.plot([startx], [starty], "bo", label="Start point")
-plt.plot([sink_x], [sink_y], "ro", label="Sink point")
+plt.plot([startx], [starty], "bo", label="Start point (profile)")
+plt.plot([sink_x], [sink_y], "ro", label="Sink point (profile)")
+
+# Plot the mask of the second basin
+plt.imshow(mask, extent=accumulator.extent)
+# Plot the start point and the sink point as squares
+plt.plot(startx_2, starty_2, "bs", label="Start point (mask)")
+plt.plot(sink_x_2, sink_y_2, "rs", label="Sink point (mask)")
+plt.title("Channel planform + basin mask")
 plt.legend()
-plt.title("Channel profile (planform)")
 
 plt.subplot(2, 2, 4)
 plt.plot(distance, area_on_profile, "k-")
