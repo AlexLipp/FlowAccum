@@ -540,3 +540,21 @@ def get_profile(long start_node, float dx, float dy, long[:] receivers, long[:] 
 
     return profile, distance
 
+@cython.boundscheck(False)  # Deactivate bounds checking
+@cython.wraparound(False)   # Deactivate negative indexing.
+def get_sink_node(long start_node, long[:] receivers):
+    """
+    Gets the node ID of the sink node that the start node ultimately flows into.
+
+    Args:
+        start_node: The node to start from.
+        receivers: The array of receivers.
+    """
+
+    cdef long current_node = start_node
+    cdef long receiver = receivers[current_node]
+    while current_node != receiver:
+        current_node = receivers[current_node]
+        receiver = receivers[current_node]
+
+    return current_node

@@ -39,6 +39,10 @@ profile, distance = accumulator.get_profile(start_node)
 area_on_profile = drainage_area.flatten()[profile]
 profile_coords = [accumulator.node_to_coord(node) for node in profile]
 
+# Find the sink node of the channel network
+sink_node = accumulator.get_sink(start_node)
+sink_x, sink_y = accumulator.node_to_coord(sink_node)
+
 print("Visualizing results")
 plt.figure(figsize=(12, 10))
 plt.subplot(2, 2, 1)
@@ -73,6 +77,7 @@ plt.plot(
     label="Channel profile",
 )
 plt.plot([startx], [starty], "bo", label="Start point")
+plt.plot([sink_x], [sink_y], "ro", label="Sink point")
 plt.legend()
 plt.title("Channel profile (planform)")
 

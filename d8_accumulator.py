@@ -289,6 +289,36 @@ class D8Accumulator:
             raise ValueError("Coordinate is out of bounds")
         return out
 
+    def get_sink(self, node: int) -> int:
+        """Gets the sink node which flow from the input node ultimate goes to.
+
+        Parameters
+        ----------
+        node : int
+            Node index
+
+        Returns
+        -------
+        int
+            Sink node index
+
+        Raises
+        ------
+        TypeError
+            If node is not an int
+        ValueError
+            If node is out of bounds
+        """
+        # Check if node is an int:
+        if not isinstance(node, int):
+            raise TypeError("Node must be an integer")
+        # Check if node is a valid node
+        if node < 0 or node >= self.arr.size:
+            raise ValueError("Node is out of bounds")
+
+        # Get the sink node
+        return cf.get_sink_node(node, self._receivers)
+
     @property
     def receivers(self) -> np.ndarray:
         """Array of receiver nodes (i.e., the ID of the node that receives the flow from the i'th node)"""
