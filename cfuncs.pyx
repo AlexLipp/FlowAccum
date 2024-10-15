@@ -480,7 +480,7 @@ cpdef (int, int) ItoXY(int i, int ncols):
 @cython.wraparound(False)   # Deactivate negative indexing.
 cpdef vector[float] XYtocoords(int x, int y, float dx, float dy, float ULx, float ULy):
     """
-    Converts a pair of col, row indices to a pair of geospatial x, y coordinates.
+    Converts a pair of col, row indices to a pair of geospatial x, y coordinates for the center of the cell.
 
     Args:
         x: The column index.
@@ -494,8 +494,9 @@ cpdef vector[float] XYtocoords(int x, int y, float dx, float dy, float ULx, floa
         The x, y coordinate pair.
     """
     cdef vector[float] coords
-    cdef float cx = ULx + x * dx
-    cdef float cy = ULy + y * dy
+    # Calculate the center coordinates of the cell (which is dx/2, dy/2 from the upper left corner)
+    cdef float cx = (ULx + x * dx) + dx / 2
+    cdef float cy = (ULy + y * dy) + dy / 2
     coords.push_back(cx)
     coords.push_back(cy)
     return coords

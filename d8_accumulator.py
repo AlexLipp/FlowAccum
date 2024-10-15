@@ -296,7 +296,7 @@ class D8Accumulator:
         return np.asarray(cf.get_upstream_nodes(start_node, delta, donors))
 
     def node_to_coord(self, node: int) -> Tuple[float, float]:
-        """Converts a node index to a coordinate pair"""
+        """Converts a node index to a coordinate pair for the centre of the pixel"""
         self._check_valid_node(node)
         _, ncols = self.arr.shape
         x_ind = node % ncols
@@ -304,12 +304,17 @@ class D8Accumulator:
         ulx, dx, _, uly, _, dy = self.ds.GetGeoTransform()
         x_coord = ulx + dx * x_ind
         y_coord = uly + dy * y_ind
+        # Add dx/2 and dy/2 to get to the center of the pixel from the upper left corner
+        x_coord += dx / 2
+        y_coord += dy / 2  # recall that dy is negative        
+
         return x_coord, y_coord
 
     def coord_to_node(self, x: float, y: float) -> int:
         """Converts a coordinate pair to a node index"""
         nrows, ncols = self.arr.shape
         ulx, dx, _, uly, _, dy = self.ds.GetGeoTransform()
+        # Casting to int rounds towards zero ('floor' for positive numbers; e.g, int(3.9) = 3)
         x_ind = int((x - ulx) / dx)
         y_ind = int((y - uly) / dy)
         out = y_ind * ncols + x_ind
