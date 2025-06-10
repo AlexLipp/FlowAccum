@@ -52,7 +52,7 @@ upstream = accumulator.get_upstream_nodes(sink_node_2)
 mask = accumulator.get_node_mask(upstream)
 # Convert the Falses into np.NaN for transparent visualization
 mask = mask.astype(float)
-mask[mask == 0] = np.NaN
+mask[mask == 0] = np.nan
 
 print("Visualizing results")
 plt.figure(figsize=(12, 10))
